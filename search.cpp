@@ -4,6 +4,7 @@
 #include <emscripten.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -187,6 +188,22 @@ public:
 
    int bb_size () const { return m_bb_size; }
 };
+
+// MultiPV (FMJD Tournament Manager, 2026): after the best line of an iteration, the root is searched again
+// without the moves already chosen, for lines 2..MultiPV. Line 1 is reported as before ("info depth=…"); the
+// others once the iteration is done, as "info multipv=<k> depth=… score=… pv=…" (an older reader of the Hub
+// protocol, expecting "info depth=", passes over them).
+
+struct Extra_Line {
+   bool set {false};
+   Move move {move::None};
+   Score score {score::None};
+   Depth depth {Depth(0)};
+   Line pv;
+};
+
+static int g_pv_idx {0};           // the line being searched: 0 the best, 1 the second, …
+static Extra_Line g_lines[10];
 
 // variables
 
@@ -537,7 +554,38 @@ void Search_Global::end() {
 void Search_Global::search(Depth depth) {
 
    sl.start_iter();
+   g_pv_idx = 0;
    sl.search_asp(*m_node, m_list, depth, Ply_Root, true);
+
+   // the next lines: the root without the moves already chosen (they stand first in m_list)
+
+   int lines = std::min(var::MultiPV, m_list.size());
+
+   for (int k = 1; k < lines; k++) {
+
+      g_pv_idx = k;
+      g_lines[k].set = false;
+
+      List rest;
+      for (int i = k; i < m_list.size(); i++) rest.add(m_list[i]);
+
+      sl.search_asp(*m_node, rest, depth, Ply_Root, true);
+   }
+
+   g_pv_idx = 0;
+
+   for (int k = 1; k < lines; k++) {
+
+      const Extra_Line & el = g_lines[k];
+      if (!el.set) continue;
+
+      std::string line = "info";
+      hub::add_pair(line, "multipv", std::to_string(k + 1));
+      hub::add_pair(line, "depth", std::to_string(el.depth));
+      if (el.score != score::None) hub::add_pair(line, "score", ml::ftos(double(el.score) / 100.0, 2));
+      if (el.pv.size() != 0) hub::add_pair(line, "pv", el.pv.to_hub(*m_node));
+      hub::write(line);
+   }
 
    // time management
 
@@ -553,6 +601,24 @@ void Search_Global::search(Depth depth) {
 }
 
 void Search_Global::new_best_move(Move mv, Score sc, Flag flag, Depth depth, const Line & pv) {
+
+   if (g_pv_idx > 0) { // MultiPV: a next line, kept for the end of the iteration; its move goes to place g_pv_idx
+
+      Extra_Line & el = g_lines[g_pv_idx];
+      el.set = true;
+      el.move = mv;
+      el.score = sc;
+      el.depth = depth;
+      el.pv = pv;
+
+      List list;
+      for (int i = 0; i < g_pv_idx; i++) list.add(m_list[i]);
+      list.add(mv);
+      for (int i = g_pv_idx; i < m_list.size(); i++) if (m_list[i] != mv) list.add(m_list[i]);
+      m_list = list;
+
+      return;
+   }
 
    Move bm = m_so->move;
 

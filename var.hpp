@@ -23,6 +23,7 @@ extern bool Ponder;
 extern int  TT_Size;
 extern bool BB;
 extern int  BB_Size;
+extern int  MultiPV; // FMJD Tournament Manager: lines searched at each depth (1 = Scan as it was)
 
 // functions
 

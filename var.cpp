@@ -21,6 +21,7 @@ bool Ponder;
 int  TT_Size;
 bool BB;
 int  BB_Size;
+int  MultiPV;
 
 static std::map<std::string, std::string> Var;
 
@@ -38,6 +39,7 @@ void init() {
    set("ponder", "false");
    set("tt-size", "22");
    set("bb-size", "0");
+   set("multipv", "1");
 
    update();
 }
@@ -126,6 +128,7 @@ void update() {
    Ponder      = get_bool("ponder");
    TT_Size     = 1 << get_int("tt-size");
    BB_Size     = get_int("bb-size");
+   MultiPV     = get_int("multipv");
    BB          = BB_Size > 0;
 }
 

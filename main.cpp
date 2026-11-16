@@ -131,6 +131,7 @@ static void hub_loop() {
          param_bool("ponder");
          param_int ("tt-size", 16, 30);
          param_int ("bb-size", 0, 7);
+         param_int ("multipv", 1, 10);
 
          hub::write("wait");
 
